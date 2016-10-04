@@ -501,6 +501,15 @@ struct trader {
 		trades(engine& e, id acid, string pwd, string mkt, int cur): _e(e), acid(acid), pwd(pwd), _mkt(mkt), _cur(cur)  {
 
 		}
+		double get_sell_amount(const curex::cex::engine::dtrade& o) const {
+			if (o.buy=='S') return o.get_amount();
+			//B 100.0000 GBP 2.0000 AUD/GBP
+			//buy cur in the numerator
+			if (o.market.find(o.cur)==0) return o.get_amount()/o.get_rate();
+			//buy cur in the denominator
+			return o.get_amount()*o.get_rate();
+
+		}
 		void dump(ostream& os) const {
 			for (auto& i: *this) i.dump(os);
 		} 
@@ -508,7 +517,7 @@ struct trader {
 			const auto& o=mo.filter_front(_cur);
 			clear();
 			for (const auto& i:o) {
-				emplace_back(order(i._id,get_sell_amount(i),i.get_encoded_rate()));
+				emplace_back(trade(get_sell_amount(i),i.get_encoded_rate()));
 			}
 		}
 		//M 121 B 80.00000 AUD 1.38995 AUD/USD 57.55600 USD 8.00000 AUD
@@ -516,6 +525,7 @@ struct trader {
 		id acid;
 		string pwd;
 		int _cur;
+		string _mkt;
 	};
 
 	struct orders: std::vector<order> {
@@ -543,7 +553,6 @@ struct trader {
 				emplace_back(order(i._id,get_sell_amount(i),i.get_encoded_rate()));
 			}
 		}
-		string _mkt;
 		double get_exposure() const {
 			return accumulate(begin(),end(),0.0,[](const auto& a, const auto& b) { return a+b.amount; });		
 		}
@@ -620,6 +629,7 @@ struct trader {
 		id acid;
 		string pwd;
 		int _cur;
+		string _mkt;
 	};
 	orders* orders_cur1;
 	orders* orders_cur2;
@@ -629,7 +639,7 @@ struct trader {
 		if (cid==_cur1) return *orders_cur1;
 		return *orders_cur2;
 	}
-	orders& get_trades(int cid) { 
+	trades& get_trades(int cid) { 
 		if (cid==_cur1) return *trades_cur1;
 		return *trades_cur2;
 	}
@@ -711,7 +721,7 @@ struct trader {
 		front_cur2.update(dliq);
 
 	}
-	void trade(const spread& fx) {
+	void do_trade(const spread& fx) {
 		acquire(fx);
 		hedge();
 		risk();
@@ -729,10 +739,10 @@ struct traders:vector<trader> {
 	}
 	engine& _e;
 
-	void trade(const spread& fx) {
+	void do_trade(const spread& fx) {
 
 		for(auto& i:*this)
-			i.trade(fx);
+			i.do_trade(fx);
 	}
 
 };
@@ -769,7 +779,7 @@ wcout << L"------------------------------------------------------" << ++ii << en
 		mgr.adjust_liquidity(*sp);
 
 //		if (++ii==2) exit(0);
-		trs.trade(*sp);
+		trs.do_trade(*sp);
 	}
 	}
 	
